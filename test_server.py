@@ -1,6 +1,3 @@
-"""
-Simple test server without MediaPipe to verify Socket.IO works
-"""
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 import time

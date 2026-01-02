@@ -1,9 +1,3 @@
-"""
-AR Mukbang - Python AI Backend
-Flask + Flask-SocketIO + OpenCV + MediaPipe Tasks API
-Single camera source architecture - Python controls webcam exclusively
-"""
-
 import cv2
 import numpy as np
 import math
@@ -18,12 +12,10 @@ import mediapipe as mp
 from mediapipe.tasks import python as mp_tasks
 from mediapipe.tasks.python import vision
 
-# ============== FLASK APP SETUP ==============
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'ar_mukbang_secret'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', logger=False, engineio_logger=False)
 
-# ============== MODEL PATHS ==============
 MODELS_DIR = os.path.join(os.path.dirname(__file__), 'models')
 HAND_MODEL_PATH = os.path.join(MODELS_DIR, 'hand_landmarker.task')
 FACE_MODEL_PATH = os.path.join(MODELS_DIR, 'face_landmarker.task')
@@ -31,7 +23,6 @@ FACE_MODEL_PATH = os.path.join(MODELS_DIR, 'face_landmarker.task')
 HAND_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task"
 FACE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
 
-# ============== GLOBAL STATE ==============
 latest_frame = None
 frame_lock = threading.Lock()
 is_running = True
@@ -39,16 +30,12 @@ hand_landmarker = None
 face_landmarker = None
 connected_clients = 0
 
-# Drawing gesture state
 drawing_points = []
-drawing_state = 'IDLE'  # IDLE, DRAWING
+drawing_state = 'IDLE'
 CIRCLE_DETECTION_THRESHOLD = 0.7
 last_shape_check_time = 0
 
-# ============== MODEL DOWNLOAD ==============
-
 def download_models():
-    """Download MediaPipe models if not present."""
     os.makedirs(MODELS_DIR, exist_ok=True)
     
     if not os.path.exists(HAND_MODEL_PATH):
@@ -62,12 +49,10 @@ def download_models():
         print(f"Face model downloaded to {FACE_MODEL_PATH}")
 
 def initialize_mediapipe():
-    """Initialize MediaPipe landmarkers."""
     global hand_landmarker, face_landmarker
     
     download_models()
     
-    # Hand Landmarker
     hand_base_options = mp_tasks.BaseOptions(model_asset_path=HAND_MODEL_PATH)
     hand_options = vision.HandLandmarkerOptions(
         base_options=hand_base_options,
@@ -78,7 +63,6 @@ def initialize_mediapipe():
     )
     hand_landmarker = vision.HandLandmarker.create_from_options(hand_options)
     
-    # Face Landmarker
     face_base_options = mp_tasks.BaseOptions(model_asset_path=FACE_MODEL_PATH)
     face_options = vision.FaceLandmarkerOptions(
         base_options=face_base_options,
@@ -91,18 +75,13 @@ def initialize_mediapipe():
     
     print("MediaPipe models initialized!")
 
-# ============== HELPER FUNCTIONS ==============
-
 def calculate_distance(p1, p2):
-    """Calculate Euclidean distance between two landmarks."""
     return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
 
 def calculate_distance_2d(p1, p2):
-    """Calculate 2D distance between two points."""
     return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
 
 def is_finger_extended(landmarks, finger_tip_id, finger_pip_id, wrist):
-    """Check if a finger is extended based on tip position relative to PIP joint."""
     tip = landmarks[finger_tip_id]
     pip = landmarks[finger_pip_id]
     tip_dist = calculate_distance(tip, wrist)
@@ -110,7 +89,6 @@ def is_finger_extended(landmarks, finger_tip_id, finger_pip_id, wrist):
     return tip_dist > pip_dist
 
 def detect_index_pointing(landmarks):
-    """Detect if only index finger is raised (pointing gesture for drawing)."""
     wrist = landmarks[0]
     
     index_extended = is_finger_extended(landmarks, 8, 6, wrist)
@@ -121,7 +99,6 @@ def detect_index_pointing(landmarks):
     return index_extended and not middle_extended and not ring_extended and not pinky_extended
 
 def detect_fist(landmarks):
-    """Detect if hand is making a fist (all fingers folded)."""
     wrist = landmarks[0]
     
     index_extended = is_finger_extended(landmarks, 8, 6, wrist)
@@ -132,7 +109,6 @@ def detect_fist(landmarks):
     return not index_extended and not middle_extended and not ring_extended and not pinky_extended
 
 def check_circle_shape(points):
-    """Check if a set of points forms a circle."""
     if len(points) < 10:
         return False, None
     
@@ -173,8 +149,7 @@ def check_circle_shape(points):
     return is_circle, (center_x, center_y) if is_circle else None
 
 def check_crescent_shape(points):
-    """Check if drawing points form a crescent/half-moon shape (for banana)."""
-    if len(points) < 8:  # Even more lenient
+    if len(points) < 8:
         return False, None
     
     points_array = np.array(points)
@@ -184,13 +159,11 @@ def check_crescent_shape(points):
     width = np.max(x_coords) - np.min(x_coords)
     height = np.max(y_coords) - np.min(y_coords)
     
-    if width < 0.03 or height < 0.03:  # Smaller minimum size
+    if width < 0.03 or height < 0.03:
         return False, None
     
-    # Crescent is curved, so aspect ratio should be elongated
     aspect_ratio = min(width, height) / max(width, height)
     
-    # Very lenient - accept elongated shapes (0.2-0.75)
     if aspect_ratio < 0.2 or aspect_ratio > 0.75:
         return False, None
     
@@ -201,24 +174,18 @@ def check_crescent_shape(points):
     end_point = points[-1]
     closure_distance = calculate_distance_2d(start_point, end_point)
     
-    # Crescent should NOT be closed (different from circle)
     avg_size = (width + height) / 2
     
-    # Very lenient - open shape check (reduced from 0.3 to 0.15)
     if closure_distance < avg_size * 0.15:
-        return False, None  # Too closed, not a crescent
+        return False, None
     
-    # Check curvature - points should form an arc
-    # Simple check: middle points should be offset from line between start/end
     mid_idx = len(points) // 2
     mid_point = points[mid_idx]
     
-    # Calculate distance from mid point to line between start and end
     line_mx = (start_point[0] + end_point[0]) / 2
     line_my = (start_point[1] + end_point[1]) / 2
     mid_offset = calculate_distance_2d((mid_point[0], mid_point[1]), (line_mx, line_my))
     
-    # Very lenient curvature check (reduced from 0.15 to 0.08)
     if mid_offset < avg_size * 0.08:
         return False, None
     
@@ -227,17 +194,15 @@ def check_crescent_shape(points):
     return is_crescent, (center_x, center_y) if is_crescent else None
 
 def draw_hand_landmarks(frame, landmarks, h, w):
-    """Draw hand landmarks on frame."""
     connections = [
-        (0, 1), (1, 2), (2, 3), (3, 4),  # Thumb
-        (0, 5), (5, 6), (6, 7), (7, 8),  # Index
-        (0, 9), (9, 10), (10, 11), (11, 12),  # Middle
-        (0, 13), (13, 14), (14, 15), (15, 16),  # Ring
-        (0, 17), (17, 18), (18, 19), (19, 20),  # Pinky
-        (5, 9), (9, 13), (13, 17)  # Palm
+        (0, 1), (1, 2), (2, 3), (3, 4),
+        (0, 5), (5, 6), (6, 7), (7, 8),
+        (0, 9), (9, 10), (10, 11), (11, 12),
+        (0, 13), (13, 14), (14, 15), (15, 16),
+        (0, 17), (17, 18), (18, 19), (19, 20),
+        (5, 9), (9, 13), (13, 17)
     ]
     
-    # Draw connections
     for start_idx, end_idx in connections:
         start = landmarks[start_idx]
         end = landmarks[end_idx]
@@ -245,28 +210,20 @@ def draw_hand_landmarks(frame, landmarks, h, w):
         pt2 = (int(end.x * w), int(end.y * h))
         cv2.line(frame, pt1, pt2, (0, 255, 0), 2)
     
-    # Draw landmarks
     for lm in landmarks:
         pt = (int(lm.x * w), int(lm.y * h))
         cv2.circle(frame, pt, 5, (255, 0, 0), -1)
 
-# ============== CAMERA PROCESSING ==============
-
 def process_frame(frame):
-    """Process a single frame with MediaPipe and return landmarks data."""
     global drawing_points, drawing_state, last_shape_check_time
     
-    # Flip horizontally for mirror effect
     frame = cv2.flip(frame, 1)
     h, w = frame.shape[:2]
     
-    # Convert BGR to RGB for MediaPipe
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
-    # Create MediaPipe Image
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
     
-    # Data to emit
     data = {
         'hand': None,
         'mouth': None,
@@ -276,18 +233,15 @@ def process_frame(frame):
     spawn_fruit = None
     spawn_banana = None
     
-    # ===== HAND PROCESSING ======
     if hand_landmarker:
         hand_result = hand_landmarker.detect(mp_image)
         
         if hand_result.hand_landmarks and len(hand_result.hand_landmarks) > 0:
             landmarks = hand_result.hand_landmarks[0]
             
-            # Get key points (normalized 0-1)
             index_tip = landmarks[8]
             thumb_tip = landmarks[4]
             
-            # Calculate pinch distance
             pinch_distance = calculate_distance(index_tip, thumb_tip)
             is_pinching = pinch_distance < 0.05
             
@@ -302,7 +256,6 @@ def process_frame(frame):
                 'pinch_distance': pinch_distance
             }
             
-            # ===== DRAWING GESTURE DETECTION =====
             is_pointing = detect_index_pointing(landmarks)
             is_fist = detect_fist(landmarks)
             
@@ -317,11 +270,9 @@ def process_frame(frame):
                     if len(drawing_points) > 200:
                         drawing_points = drawing_points[-200:]
                 elif is_fist:
-                    # Check crescent FIRST (prioritize banana)
                     is_crescent, crescent_center = check_crescent_shape(drawing_points)
                     is_circle, circle_center = check_circle_shape(drawing_points)
                     
-                    # Prioritize crescent over circle
                     if is_crescent and crescent_center:
                         spawn_banana = {'x': crescent_center[0], 'y': crescent_center[1]}
                     elif is_circle and circle_center:
@@ -330,7 +281,6 @@ def process_frame(frame):
                     drawing_points = []
                     drawing_state = 'IDLE'
             
-            # Draw hand landmarks
             draw_hand_landmarks(frame, landmarks, h, w)
         else:
             if drawing_state == 'DRAWING' and len(drawing_points) > 10:
@@ -340,14 +290,12 @@ def process_frame(frame):
             drawing_points = []
             drawing_state = 'IDLE'
     
-    # ===== FACE/MOUTH PROCESSING =====
     if face_landmarker:
         face_result = face_landmarker.detect(mp_image)
         
         if face_result.face_landmarks and len(face_result.face_landmarks) > 0:
             landmarks = face_result.face_landmarks[0]
             
-            # Lip landmarks (normalized 0-1)
             upper_lip = landmarks[13]
             lower_lip = landmarks[14]
             
@@ -359,37 +307,30 @@ def process_frame(frame):
                 'is_open': (lower_lip.y - upper_lip.y) > 0.02
             }
             
-            # Draw mouth indicators
             lip_indices = [13, 14, 78, 308, 191, 80, 81, 82, 312, 311, 310, 415]
             for idx in lip_indices:
                 if idx < len(landmarks):
                     pt = landmarks[idx]
                     cv2.circle(frame, (int(pt.x * w), int(pt.y * h)), 2, (0, 255, 0), -1)
     
-    # ===== DRAW TRAIL FOR DRAWING GESTURE =====
     if len(drawing_points) > 1:
         for i in range(1, len(drawing_points)):
             pt1 = (int(drawing_points[i-1][0] * w), int(drawing_points[i-1][1] * h))
             pt2 = (int(drawing_points[i][0] * w), int(drawing_points[i][1] * h))
             cv2.line(frame, pt1, pt2, (255, 0, 255), 3)
     
-    # Draw state indicator
     state_text = f"State: {drawing_state}"
     cv2.putText(frame, state_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
     
     return frame, data, spawn_fruit, spawn_banana
 
 def camera_loop():
-    """Background thread for camera capture and processing."""
     global latest_frame, is_running
     
-    # Wait for server to be ready
     time.sleep(2)
     
-    # Initialize MediaPipe
     initialize_mediapipe()
     
-    # Try different camera indices with DirectShow backend (Windows)
     cap = None
     for camera_idx in [0, 1, 2]:
         print(f"Trying camera index {camera_idx}...")
@@ -417,7 +358,7 @@ def camera_loop():
     print("Camera started! Processing frames...")
     
     failed_reads = 0
-    local_last_emit = 0  # Local variable for rate limiting
+    local_last_emit = 0
     
     while is_running:
         ret, frame = cap.read()
@@ -431,28 +372,21 @@ def camera_loop():
         
         failed_reads = 0
         
-        # Process frame
         processed_frame, data, spawn_fruit, spawn_banana = process_frame(frame)
         
-        # Store latest frame for MJPEG streaming
         with frame_lock:
             latest_frame = processed_frame.copy()
         
-        # Only emit if there are connected clients (with rate limiting)
         if connected_clients > 0:
             current_time = time.time()
             
-            # Rate limiting: emit max 10 times per second (every 100ms)
             if current_time - local_last_emit >= 0.1:
                 try:
-                    # Emit landmark data via SocketIO
                     socketio.emit('update_data', data, namespace='/')
                     local_last_emit = current_time
                 except Exception as e:
-                    # Silently ignore emit errors
                     pass
             
-            # Spawn fruit is instant (no rate limiting)
             if spawn_fruit:
                 try:
                     fruit_data = {
@@ -464,7 +398,6 @@ def camera_loop():
                 except Exception as e:
                     pass
             
-            # Spawn banana (crescent shape)
             if spawn_banana:
                 try:
                     banana_data = {
@@ -476,14 +409,12 @@ def camera_loop():
                 except Exception as e:
                     pass
         
-        # 20 FPS target (giảm tải CPU)
         time.sleep(0.05)
     
     cap.release()
     print("Camera stopped!")
 
 def generate_frames():
-    """Generator function for MJPEG streaming."""
     global latest_frame
     
     while is_running:
@@ -493,7 +424,6 @@ def generate_frames():
                 continue
             frame = latest_frame.copy()
         
-        # Encode as JPEG
         ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
         if not ret:
             time.sleep(0.1)
@@ -504,34 +434,27 @@ def generate_frames():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
         
-        # Delay để giảm tải (15 FPS cho stream)
         time.sleep(0.066)
 
-# ============== FLASK ROUTES ==============
 
 @app.route('/')
 def index():
-    """Serve the main HTML page."""
     return render_template('index.html')
 
 @app.route('/test')
 def test():
-    """Serve test page."""
     return render_template('test.html')
 
 @app.route('/video_feed')
 def video_feed():
-    """MJPEG video stream endpoint."""
     return Response(
         generate_frames(),
         mimetype='multipart/x-mixed-replace; boundary=frame'
     )
 
-# ============== SOCKETIO EVENTS ==============
 
 @socketio.on('connect')
 def handle_connect():
-    """Handle client connection."""
     global connected_clients
     connected_clients += 1
     print(f'Client connected! Total clients: {connected_clients}')
@@ -539,25 +462,20 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    """Handle client disconnection."""
     global connected_clients
     connected_clients = max(0, connected_clients - 1)
     print(f'Client disconnected! Total clients: {connected_clients}')
 
 @socketio.on('eaten')
 def handle_eaten(data):
-    """Handle fruit eaten event from client."""
     print(f"Fruit eaten! Data: {data}")
 
-# ============== MAIN ==============
 
 if __name__ == '__main__':
     print("Starting AR Mukbang server...")
     print("Open http://localhost:5000 in your browser")
     
-    # Start camera processing in background thread
     camera_thread = threading.Thread(target=camera_loop, daemon=True)
     camera_thread.start()
     
-    # Run Flask-SocketIO server (blocking call)
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, use_reloader=False)

@@ -133,13 +133,13 @@
 </head>
 <body>
     <div id="container">
-        <!-- Video background from Python backend -->
+        
         <img id="video-background" src="/video_feed" alt="Webcam Feed">
         
-        <!-- Three.js canvas overlay -->
+        
         <canvas id="three-canvas"></canvas>
         
-        <!-- UI Overlay (hidden) -->
+        
         <div id="ui-overlay" style="display: none;">
             <div id="status" class="disconnected">
                 <span id="connection-status">🔴 Disconnected</span>
@@ -149,7 +149,7 @@
             </div>
         </div>
         
-        <!-- Instructions (hidden) -->
+        
         <div id="instructions" style="display: none;">
             <h3>🎮 How to Play</h3>
             <p><span class="emoji">☝️</span> Point with index finger to draw</p>
@@ -158,17 +158,17 @@
             <p><span class="emoji">😮</span> Bring fruit to mouth & open wide to eat!</p>
         </div>
         
-        <!-- Loading screen -->
+        
         <div id="loading">
             <div class="spinner"></div>
             <p>Loading AR Mukbang...</p>
         </div>
     </div>
     
-    <!-- Socket.IO Client (must be loaded FIRST) -->
+    
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     
-    <!-- Import Maps for ES Modules -->
+    
     <script type="importmap">
         {
             "imports": {
@@ -178,7 +178,7 @@
         }
     </script>
     
-    <!-- Main application script as ES Module -->
+    
     <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>
