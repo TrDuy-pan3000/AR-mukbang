@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Mukbang - Interactive AR Food Experience</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #video-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+        
+        #three-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+        
+        #status {
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        
+        #status.connected {
+            border-left: 4px solid #4CAF50;
+        }
+        
+        #status.disconnected {
+            border-left: 4px solid #f44336;
+        }
+        
+        #score {
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            font-size: 24px;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            color: white;
+            text-align: center;
+            padding: 15px 30px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+        
+        #instructions h3 {
+            margin-bottom: 10px;
+            color: #4CAF50;
+        }
+        
+        #instructions p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        
+        .emoji {
+            font-size: 20px;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            color: white;
+            font-size: 24px;
+            text-align: center;
+        }
+        
+        #loading.hidden {
+            display: none;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255,255,255,0.3);
+            border-top-color: #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <!-- Video background from Python backend -->
+        <img id="video-background" src="/video_feed" alt="Webcam Feed">
+        
+        <!-- Three.js canvas overlay -->
+        <canvas id="three-canvas"></canvas>
+        
+        <!-- UI Overlay (hidden) -->
+        <div id="ui-overlay" style="display: none;">
+            <div id="status" class="disconnected">
+                <span id="connection-status">🔴 Disconnected</span>
+            </div>
+            <div id="score">
+                <span class="emoji">🍎</span> Score: <span id="score-value">0</span>
+            </div>
+        </div>
+        
+        <!-- Instructions (hidden) -->
+        <div id="instructions" style="display: none;">
+            <h3>🎮 How to Play</h3>
+            <p><span class="emoji">☝️</span> Point with index finger to draw</p>
+            <p><span class="emoji">⭕</span> Draw a circle in the air to spawn fruit</p>
+            <p><span class="emoji">🤏</span> Pinch (thumb + index) to grab fruit</p>
+            <p><span class="emoji">😮</span> Bring fruit to mouth & open wide to eat!</p>
+        </div>
+        
+        <!-- Loading screen -->
+        <div id="loading">
+            <div class="spinner"></div>
+            <p>Loading AR Mukbang...</p>
+        </div>
+    </div>
+    
+    <!-- Socket.IO Client (must be loaded FIRST) -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    
+    <!-- Import Maps for ES Modules -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    
+    <!-- Main application script as ES Module -->
+    <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

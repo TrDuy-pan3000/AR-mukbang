@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.IO Test</title>
+</head>
+<body>
+    <h1>Socket.IO Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="log"></div>
+    
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+        
+        function log(msg) {
+            console.log(msg);
+            logEl.innerHTML += '<p>' + msg + '</p>';
+        }
+        
+        log('Initializing Socket.IO...');
+        const socket = io();
+        
+        socket.on('connect', () => {
+            log('✅ CONNECTED!');
+            statusEl.textContent = '✅ Connected';
+            statusEl.style.color = 'green';
+        });
+        
+        socket.on('disconnect', () => {
+            log('❌ DISCONNECTED');
+            statusEl.textContent = '❌ Disconnected';
+            statusEl.style.color = 'red';
+        });
+        
+        socket.on('connected', (data) => {
+            log('Server says: ' + data.message);
+        });
+        
+        socket.on('update_data', (data) => {
+            log('Got update_data: ' + JSON.stringify(data).substring(0, 100));
+        });
+    </script>
+</body>
+</html>

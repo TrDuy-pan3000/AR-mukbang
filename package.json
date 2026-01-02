@@ -1,0 +1,16 @@
+{
+  "name": "fruit",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "three-bvh-csg": "^0.0.17",
+    "three-mesh-bvh": "^0.9.4"
+  }
+}
